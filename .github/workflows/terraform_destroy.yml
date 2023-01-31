@@ -1,0 +1,70 @@
+name: 'Terraform-Destroy'
+
+on:
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    name: 'Terraform-Destroy'
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_KEY }}
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.1.9
+
+    - uses: DamianReeves/write-file-action@master
+      with:
+        path: backend.tf
+        contents: |
+          terraform {
+            backend "s3" {
+              bucket = "${{ secrets.BUCKET_NAME }}"
+              key    = "state/terraform.tfstate"
+              region = "us-east-1"
+            }
+          }
+        write-mode: overwrite
+
+    - name: Verify Backend.tf
+      run: |
+        ls -R
+        cat backend.tf
+
+    - name: Debug
+      run: echo "$GITHUB_REF"
+
+    - name: Terraform Destroy Dev
+      if: github.ref == 'refs/heads/dev'
+      run: make destroy_dev
+      env:
+        TF_VAR_environment: "dev"
+        TF_VAR_region: "us-east-1"
+        TF_VAR_ami_id: "ami-0aa7d40eeae50c9a9"
+
+    - name: Terraform Destroy QA
+      if: github.ref == 'refs/heads/qa'
+      run: make destroy_qa
+      env:
+        TF_VAR_environment: "qa"
+        TF_VAR_region: "us-east-2"
+        TF_VAR_ami_id: "ami-05bfbece1ed5beb54"
+
+    - name: Terraform Destroy Prod
+      if: github.ref == 'refs/heads/master'
+      run: make destroy_prod
+      env:
+        TF_VAR_environment: "prod"
+        TF_VAR_region: "us-west-2"
+        TF_VAR_ami_id: "ami-06e85d4c3149db26a"
